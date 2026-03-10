@@ -27,13 +27,11 @@ services:
     # Explicit environment mapping — makes required variables visible at a glance.
     # Values are inherited from the env_file above; override here if needed.
     environment:
-      NODE_ENV: production
       AWS_REGION: ${AWS_REGION}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       WEBHOOK_URL: ${WEBHOOK_URL}
       COST_THRESHOLD_USD: ${COST_THRESHOLD_USD:-100}
-      LOOKBACK_DAYS: ${LOOKBACK_DAYS:-30}
 
     # The app exits after sending the report; restart only on unexpected failures.
     restart: on-failure

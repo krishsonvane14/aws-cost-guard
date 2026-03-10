@@ -1,0 +1,133 @@
+"""AWS Cost Explorer client — fetches spend data via boto3."""
+
+from __future__ import annotations
+
+from datetime import date, timedelta
+from typing import Any
+
+import boto3
+
+from .models import CostData, ServiceCost
+
+
+def _parse_amount(raw: str | None) -> float:
+    """Safely parse a Cost Explorer amount string to float."""
+    try:
+        return float(raw or "0")
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def _iso(d: date) -> str:
+    return d.isoformat()
+
+
+class AWSCostClient:
+    """Thin wrapper around the Cost Explorer ``GetCostAndUsage`` API."""
+
+    def __init__(self, region: str = "us-east-1") -> None:
+        self._client = boto3.client("ce", region_name=region)
+
+    # ── public methods ────────────────────────────────────────────────────
+
+    def get_yesterday_and_mtd(self) -> dict[str, Any]:
+        """Return yesterday's spend, MTD total, and currency.
+
+        Returns a dict with keys ``yesterday_spend``, ``month_to_date_spend``,
+        and ``currency`` — ready to be unpacked into :class:`CostData`.
+        """
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+        month_start = today.replace(day=1)
+
+        try:
+            yd_resp = self._get_cost(yesterday, today, "DAILY")
+            mtd_resp = self._get_cost(month_start, today, "DAILY")
+        except Exception as exc:
+            raise RuntimeError(f"Failed to fetch yesterday/MTD costs: {exc}") from exc
+
+        yd_result = (yd_resp.get("ResultsByTime") or [{}])[0]
+        yd_total = (yd_result.get("Total") or {}).get("UnblendedCost") or {}
+        currency = yd_total.get("Unit", "USD")
+
+        mtd_spend = sum(
+            _parse_amount(
+                (r.get("Total") or {}).get("UnblendedCost", {}).get("Amount")
+            )
+            for r in mtd_resp.get("ResultsByTime", [])
+        )
+
+        return {
+            "yesterday_spend": _parse_amount(yd_total.get("Amount")),
+            "month_to_date_spend": mtd_spend,
+            "currency": currency,
+        }
+
+    def get_top_services(self, limit: int = 5) -> list[ServiceCost]:
+        """Fetch the top *limit* most expensive services for the current month."""
+        today = date.today()
+        month_start = today.replace(day=1)
+
+        try:
+            resp = self._get_cost(
+                month_start,
+                today,
+                "MONTHLY",
+                group_by=[{"Type": "DIMENSION", "Key": "SERVICE"}],
+            )
+        except Exception as exc:
+            raise RuntimeError(f"Failed to fetch top services: {exc}") from exc
+
+        groups = (resp.get("ResultsByTime") or [{}])[0].get("Groups", [])
+        services = [
+            ServiceCost(
+                service_name=(g.get("Keys") or ["Unknown"])[0],
+                amount=_parse_amount(
+                    (g.get("Metrics") or {}).get("UnblendedCost", {}).get("Amount")
+                ),
+            )
+            for g in groups
+        ]
+        services.sort(key=lambda s: s.amount, reverse=True)
+        return services[:limit]
+
+    def get_seven_day_average(self) -> float:
+        """Return the arithmetic mean of daily spend over the last 7 days."""
+        today = date.today()
+        start = today - timedelta(days=7)
+
+        try:
+            resp = self._get_cost(start, today, "DAILY")
+        except Exception as exc:
+            raise RuntimeError(f"Failed to fetch 7-day average: {exc}") from exc
+
+        days = resp.get("ResultsByTime", [])
+        if not days:
+            return 0.0
+
+        total = sum(
+            _parse_amount(
+                (r.get("Total") or {}).get("UnblendedCost", {}).get("Amount")
+            )
+            for r in days
+        )
+        return total / len(days)
+
+    # ── private helpers ───────────────────────────────────────────────────
+
+    def _get_cost(
+        self,
+        start: date,
+        end: date,
+        granularity: str,
+        *,
+        group_by: list[dict[str, str]] | None = None,
+    ) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {
+            "TimePeriod": {"Start": _iso(start), "End": _iso(end)},
+            "Granularity": granularity,
+            "Metrics": ["UnblendedCost"],
+        }
+        if group_by:
+            kwargs["GroupBy"] = group_by
+        return self._client.get_cost_and_usage(**kwargs)

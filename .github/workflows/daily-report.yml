@@ -34,18 +34,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js 20
-        uses: actions/setup-node@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
         with:
-          node-version: "20"
-          cache: "npm"
+          python-version: "3.11"
+          cache: "pip"
 
-      # Uses `npm ci` for a clean, reproducible install from package-lock.json.
       - name: Install dependencies
-        run: npm ci
+        run: pip install -r requirements.txt
 
       - name: Run AWS Cost Guard
-        run: npx tsx src/index.ts
+        run: python -m src.main
         env:
           # ── AWS credentials ──────────────────────────────────────────────
           # Set these in: Settings → Secrets and variables → Actions

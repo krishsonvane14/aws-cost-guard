@@ -32,7 +32,7 @@ You spun up a quick experiment on a Friday. By Monday, a forgotten EC2 instance 
 ```mermaid
 graph LR
     A[AWS Cost Explorer API] -->|GetCostAndUsage| B(GitHub Actions Runner)
-    B -->|analyzeSpendVariance| C{Anomaly?}
+    B -->|analyze_spend_variance| C{Anomaly?}
     C -->|Yes — red embed| D[Discord / Slack Webhook]
     C -->|No — green embed| D
 ```
@@ -159,16 +159,20 @@ The workflow runs automatically at **09:00 UTC every day**. Adjust the cron expr
 
 No AWS account? No problem. The mock test script runs the entire pipeline with static fixture data and fires a real webhook — great for validating your Discord URL before going live.
 
+**Prerequisites:** Python 3.11+
+
 ```bash
-# 1. Install dependencies
-npm install
+# 1. Create a virtual environment and install dependencies
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
 
 # 2. Configure your webhook URL
 cp .env.example .env
 # Edit .env and set WEBHOOK_URL to your real Discord webhook
 
 # 3. Run the mock test (uses hardcoded $85 spend vs $20 avg → triggers anomaly)
-npm run dev -- src/mock-test.ts
+python -m src.mock_test
 ```
 
 Expected output:
@@ -180,8 +184,8 @@ Month to date   : $450.00
 7-day average   : $20.00
 Top services    : Amazon EC2, Amazon RDS, Amazon S3
 
-Anomaly detected : true
-Variance         : 325%
+Anomaly detected : True
+Variance         : 325.0%
 
 Formatted Discord embed:
 { ... }
@@ -233,7 +237,7 @@ The production image runs with:
 - ✅ Read-only root filesystem
 - ✅ All Linux capabilities dropped (`cap_drop: ALL`)
 - ✅ `no-new-privileges` security option
-- ✅ Multi-stage build — no compiler, source files, or dev dependencies in the final image
+- ✅ Multi-stage build — no compiler toolchain or build dependencies in the final image
 
 ---
 
@@ -241,10 +245,9 @@ The production image runs with:
 
 | Layer | Technology |
 |---|---|
-| Language | TypeScript 5 (strict mode, ESM) |
-| Runtime | Node.js 20 |
-| AWS SDK | `@aws-sdk/client-cost-explorer` v3 |
-| HTTP | Native `fetch` (Node 20 built-in) |
+| Language | Python 3.11 |
+| AWS SDK | `boto3` |
+| HTTP | `requests` |
 | Container | Docker (multi-stage, Alpine-based) |
 | Orchestration | Docker Compose |
 | Infrastructure | Terraform (IAM policy) |
@@ -261,7 +264,6 @@ The production image runs with:
 | `AWS_SECRET_ACCESS_KEY` | ✅* | — | Corresponding secret key |
 | `WEBHOOK_URL` | ✅ | — | Discord or Slack incoming webhook URL |
 | `COST_THRESHOLD_USD` | — | `100` | MTD spend (USD) above which a webhook is sent |
-| `LOOKBACK_DAYS` | — | `30` | Days of history used for context |
 
 ---
 
