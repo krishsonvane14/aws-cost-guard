@@ -1,0 +1,58 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# AWS Cost Guard — Daily Report
+# ──────────────────────────────────────────────────────────────────────────────
+# Before this workflow can run, add the following secrets in your repository:
+#   GitHub → Settings → Secrets and variables → Actions → New repository secret
+#
+#   AWS_ACCESS_KEY_ID      — Access key for the IAM user/role with the
+#                            aws-cost-guard-cost-explorer-read-only policy
+#   AWS_SECRET_ACCESS_KEY  — Corresponding secret key
+#   AWS_REGION             — AWS region (e.g. us-east-1)
+#   WEBHOOK_URL            — Your Discord (or Slack) incoming webhook URL
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: Daily Cost Report
+
+on:
+  # Runs every day at 09:00 UTC — adjust the cron expression to your timezone.
+  schedule:
+    - cron: "0 9 * * *"
+
+  # Allows you to trigger the workflow manually from the Actions tab for testing.
+  workflow_dispatch:
+
+jobs:
+  cost-report:
+    name: Fetch & Send AWS Cost Report
+    runs-on: ubuntu-latest
+
+    # Least-privilege token — this workflow only needs to read repo contents.
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      # Uses `npm ci` for a clean, reproducible install from package-lock.json.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run AWS Cost Guard
+        run: npx tsx src/index.ts
+        env:
+          # ── AWS credentials ──────────────────────────────────────────────
+          # Set these in: Settings → Secrets and variables → Actions
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+
+          # ── Webhook destination ──────────────────────────────────────────
+          # Paste your Discord or Slack incoming webhook URL into the secret.
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
