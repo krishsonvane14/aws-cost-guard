@@ -1,12 +1,20 @@
-import axios from "axios";
 import type { WebhookPayload } from "./types.js";
 
 export async function sendWebhook(
   webhookUrl: string,
   payload: WebhookPayload
 ): Promise<void> {
-  await axios.post(webhookUrl, payload, {
+  const response = await fetch(webhookUrl, {
+    method: "POST",
     headers: { "Content-Type": "application/json" },
-    timeout: 10_000,
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(10_000),
   });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Discord webhook request failed — HTTP ${response.status}: ${errorText}`
+    );
+  }
 }

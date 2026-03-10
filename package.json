@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "@aws-sdk/client-cost-explorer": "^3.758.0",
-    "axios": "^1.8.1",
     "dotenv": "^16.4.7"
   },
   "devDependencies": {
