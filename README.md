@@ -39,6 +39,94 @@ graph LR
 
 ---
 
+## One-Time AWS Setup
+
+> **Already an AWS power user?** Skip to the [Terraform path](#option-b-existing-aws-users--terraform) below.
+
+Before the Quick Start steps will work, you need three things from AWS: Cost Explorer enabled, an IAM identity with the right permission, and the correct region. This section walks through both paths — manual (for beginners) and Terraform (for everyone else).
+
+---
+
+### Step 1 — Enable Cost Explorer
+
+Cost Explorer is **not on by default**. If you skip this, the app will throw a `DataUnavailableException` or `User not enabled` error.
+
+1. Sign in to the [AWS Console](https://console.aws.amazon.com).
+2. Search for **Cost Explorer** in the top search bar and open it.
+3. Click **Launch Cost Explorer** (the big blue button on the landing page).
+4. AWS will start ingesting billing data. **It can take up to 24 hours** for historical data to populate. The app will work once data is available — if you run it too soon you may get empty results.
+
+> **Cost:** Enabling Cost Explorer is free. Each API call costs $0.01. At one call per day, that's ~$0.30/month.
+
+---
+
+### Step 2 — Create an IAM Identity with Permissions
+
+Choose the path that matches your situation.
+
+---
+
+#### Option A: New AWS Users — Manual Setup
+
+1. In the AWS Console, go to **IAM → Users → Create user**.
+2. Give it a name like `aws-cost-guard`.
+3. On the **Permissions** step, choose **Attach policies directly → Create policy**.
+4. Switch to the **JSON** tab and paste:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowGetCostAndUsage",
+      "Effect": "Allow",
+      "Action": ["ce:GetCostAndUsage"],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+5. Name the policy `aws-cost-guard-cost-explorer-read-only` and save it.
+6. Attach the policy to your new user and finish creating the user.
+7. Go to the user → **Security credentials → Create access key** → choose **Application running outside AWS**.
+8. Copy the **Access key ID** and **Secret access key** — you will paste these into GitHub Secrets in the next section.
+
+---
+
+#### Option B: Existing AWS Users — Terraform
+
+If you already manage AWS infrastructure with Terraform, use the included configuration to provision the policy automatically. It creates nothing beyond a single least-privilege `aws_iam_policy` resource — no users, no roles.
+
+```bash
+cd terraform
+
+# Authenticate however your team normally does (profile, env vars, SSO, etc.)
+terraform init
+terraform plan   # review what will be created
+terraform apply
+```
+
+Terraform will output the policy ARN. Attach it to whichever IAM user or OIDC role your GitHub Actions workflow assumes:
+
+```hcl
+# Example: attach to an existing OIDC role
+resource "aws_iam_role_policy_attachment" "cost_guard_github" {
+  role       = aws_iam_role.github_actions.name
+  policy_arn = "arn:aws:iam::<ACCOUNT_ID>:policy/aws-cost-guard/aws-cost-guard-cost-explorer-read-only"
+}
+```
+
+> Using GitHub Actions OIDC (keyless auth) is strongly recommended over long-lived access keys. See the comments in [terraform/iam-policy.tf](terraform/iam-policy.tf) for a full workflow example.
+
+---
+
+### Step 3 — Region Note
+
+Cost Explorer is a **global service**, but its API endpoint is always in `us-east-1`. Set your `AWS_REGION` secret (and the `AWS_REGION` env var locally) to `us-east-1` regardless of where your workloads run — Cost Explorer aggregates spend across all regions automatically.
+
+---
+
 ## Quick Start
 
 ### 1. Fork the repository
