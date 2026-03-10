@@ -1,8 +1,8 @@
 import "dotenv/config";
-import { createCostExplorerClient, fetchMonthlyCosts } from "./aws-client.js";
+import { AWSCostClient } from "./aws-client.js";
 import { exceedsThreshold, formatCostPayload } from "./formatter.js";
 import { sendWebhook } from "./notifier.js";
-import type { AppConfig } from "./types.js";
+import type { AppConfig, CostData } from "./types.js";
 
 function loadConfig(): AppConfig {
   const required = ["WEBHOOK_URL"];
@@ -18,33 +18,35 @@ function loadConfig(): AppConfig {
   };
 }
 
-function getDateRange(lookbackDays: number): { start: string; end: string } {
-  const end = new Date();
-  const start = new Date();
-  start.setDate(end.getDate() - lookbackDays);
-
-  return {
-    start: start.toISOString().split("T")[0] as string,
-    end: end.toISOString().split("T")[0] as string,
-  };
-}
-
 async function main(): Promise<void> {
   const config = loadConfig();
-  const client = createCostExplorerClient(config.awsRegion);
-  const { start, end } = getDateRange(config.lookbackDays);
+  const awsClient = new AWSCostClient(config.awsRegion);
 
-  console.log(`Fetching AWS costs from ${start} to ${end}…`);
-  const costEntry = await fetchMonthlyCosts(client, start, end);
+  console.log("Fetching AWS cost data…");
 
-  if (!exceedsThreshold(costEntry, config.costThreshold)) {
+  const [partialCostData, topServices, sevenDayAverage] = await Promise.all([
+    awsClient.getYesterdayAndMTD(),
+    awsClient.getTopServices(),
+    awsClient.getSevenDayAverage(),
+  ]);
+
+  const costData: CostData = {
+    ...partialCostData,
+    forecastedSpend: 0, // populated by a future getForecast() method
+  };
+
+  console.log(
+    `MTD: $${costData.monthToDateSpend.toFixed(2)} | Yesterday: $${costData.yesterdaySpend.toFixed(2)} | 7-day avg: $${sevenDayAverage.toFixed(2)}`
+  );
+
+  if (!exceedsThreshold(costData, config.costThreshold)) {
     console.log(
-      `Cost $${costEntry.totalAmount} is within threshold $${config.costThreshold}. No alert sent.`
+      `MTD spend $${costData.monthToDateSpend.toFixed(2)} is within threshold $${config.costThreshold}. No alert sent.`
     );
     return;
   }
 
-  const payload = formatCostPayload(costEntry);
+  const payload = formatCostPayload(costData, topServices);
   await sendWebhook(config.webhookUrl, payload);
   console.log(`Alert sent: ${payload.title}`);
 }

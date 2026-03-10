@@ -1,27 +1,24 @@
-import type { WebhookPayload } from "./types.js";
-import type { CostEntry } from "./aws-client.js";
+import type { CostData, ServiceCost, WebhookPayload } from "./types.js";
 
-export function formatCostPayload(entry: CostEntry): WebhookPayload {
-  const topServices = [...entry.services]
-    .sort((a, b) => b.amount - a.amount)
-    .slice(0, 10);
-
-  const totalFormatted = entry.totalAmount.toFixed(2);
-  const period = `${entry.timePeriod.start} → ${entry.timePeriod.end}`;
+export function formatCostPayload(
+  costData: CostData,
+  topServices: ServiceCost[]
+): WebhookPayload {
+  const totalFormatted = costData.monthToDateSpend.toFixed(2);
 
   return {
-    title: `AWS Cost Report: $${totalFormatted} ${entry.currency}`,
-    period,
+    title: `AWS Cost Report (MTD): $${totalFormatted} ${costData.currency}`,
+    period: `MTD · yesterday $${costData.yesterdaySpend.toFixed(2)}`,
     totalCost: totalFormatted,
-    currency: entry.currency,
+    currency: costData.currency,
     services: topServices,
     timestamp: new Date().toISOString(),
   };
 }
 
 export function exceedsThreshold(
-  entry: CostEntry,
+  costData: CostData,
   thresholdUsd: number
 ): boolean {
-  return entry.totalAmount > thresholdUsd;
+  return costData.monthToDateSpend > thresholdUsd;
 }
