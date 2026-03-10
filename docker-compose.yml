@@ -1,0 +1,52 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# AWS Cost Guard — Docker Compose
+# ──────────────────────────────────────────────────────────────────────────────
+# Usage:
+#   1. Copy the example env file and fill in your values:
+#        cp .env.example .env
+#   2. Run a one-off report:
+#        docker compose run --rm cost-guard
+#   3. Or start as a persistent service (relies on cron/scheduler externally):
+#        docker compose up
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+  cost-guard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+
+    image: aws-cost-guard:latest
+
+    # All variables are read from the .env file in the project root.
+    # See .env.example for the full list of required variables.
+    env_file:
+      - .env
+
+    # Explicit environment mapping — makes required variables visible at a glance.
+    # Values are inherited from the env_file above; override here if needed.
+    environment:
+      NODE_ENV: production
+      AWS_REGION: ${AWS_REGION}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      WEBHOOK_URL: ${WEBHOOK_URL}
+      COST_THRESHOLD_USD: ${COST_THRESHOLD_USD:-100}
+      LOOKBACK_DAYS: ${LOOKBACK_DAYS:-30}
+
+    # The app exits after sending the report; restart only on unexpected failures.
+    restart: on-failure
+
+    # Drop all Linux capabilities — the app makes only outbound HTTPS calls.
+    cap_drop:
+      - ALL
+
+    # Prevent the container from gaining new privileges.
+    security_opt:
+      - no-new-privileges:true
+
+    # Read-only root filesystem; /tmp is the only writable surface.
+    read_only: true
+    tmpfs:
+      - /tmp
