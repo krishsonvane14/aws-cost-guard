@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { analyzeSpendVariance } from "./anomaly-engine.js";
 import { AWSCostClient } from "./aws-client.js";
 import { exceedsThreshold, formatCostPayload } from "./formatter.js";
 import { sendWebhook } from "./notifier.js";
@@ -34,6 +35,9 @@ async function main(): Promise<void> {
     ...partialCostData,
     forecastedSpend: 0, // populated by a future getForecast() method
   };
+    
+  // this is after fetching 
+  const anomalyReport = analyzeSpendVariance(costData.yesterdaySpend, sevenDayAverage);
 
   console.log(
     `MTD: $${costData.monthToDateSpend.toFixed(2)} | Yesterday: $${costData.yesterdaySpend.toFixed(2)} | 7-day avg: $${sevenDayAverage.toFixed(2)}`
