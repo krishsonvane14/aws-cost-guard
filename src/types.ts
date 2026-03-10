@@ -38,13 +38,27 @@ export interface CostReport {
   anomalyReport: AnomalyReport;
 }
 
-export interface WebhookPayload {
+/** A single field inside a Discord embed. */
+export interface DiscordEmbedField {
+  name: string;
+  value: string;
+  /** When `true`, Discord renders up to three fields side-by-side. */
+  inline?: boolean;
+}
+
+/** A Discord embed object. */
+export interface DiscordEmbed {
   title: string;
-  period: string;
-  totalCost: string;
-  currency: string;
-  services: ServiceCost[];
+  description?: string;
+  /** Decimal colour integer (e.g. `16711680` = red, `65280` = green). */
+  color: number;
+  fields: DiscordEmbedField[];
   timestamp: string;
+}
+
+/** Top-level Discord (or Slack-compatible) webhook body. */
+export interface WebhookPayload {
+  embeds: [DiscordEmbed];
 }
 
 export interface AppConfig {

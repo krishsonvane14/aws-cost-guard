@@ -50,9 +50,10 @@ async function main(): Promise<void> {
     return;
   }
 
-  const payload = formatCostPayload(costData, topServices);
+  const costReport = { costData, topServices, anomalyReport };
+  const payload = formatCostPayload(costReport);
   await sendWebhook(config.webhookUrl, payload);
-  console.log(`Alert sent: ${payload.title}`);
+  console.log(`Alert sent — anomaly: ${anomalyReport.isAnomaly}, variance: ${anomalyReport.percentageVariance}%`);
 }
 
 main().catch((err: unknown) => {
