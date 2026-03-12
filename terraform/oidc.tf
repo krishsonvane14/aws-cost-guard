@@ -69,7 +69,7 @@ resource "aws_iam_role" "cost_guard_github" {
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
           }
           StringLike = {
-            "token.actions.githubusercontent.com:sub" = "repo:${var.github_org}/${var.github_repo}:ref:refs/heads/main"
+            "token.actions.githubusercontent.com:sub" = "repo:${var.github_org}/${var.github_repo}:*"
           }
         }
       }
