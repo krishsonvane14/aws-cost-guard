@@ -1,0 +1,3 @@
+# Source file for pip-compile. Do not edit requirements.txt directly.
+boto3>=1.34.0
+requests>=2.31.0

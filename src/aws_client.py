@@ -6,8 +6,10 @@ from datetime import date, timedelta
 from typing import Any
 
 import boto3
+from botocore.exceptions import ClientError, NoCredentialsError
+from mypy_boto3_ce.type_defs import GetCostAndUsageResponseTypeDef
 
-from .models import CostData, ServiceCost
+from .models import ServiceCost
 
 
 def _parse_amount(raw: str | None) -> float:
@@ -43,8 +45,17 @@ class AWSCostClient:
         try:
             yd_resp = self._get_cost(yesterday, today, "DAILY")
             mtd_resp = self._get_cost(month_start, today, "DAILY")
-        except Exception as exc:
-            raise RuntimeError(f"Failed to fetch yesterday/MTD costs: {exc}") from exc
+        except NoCredentialsError as e:
+            raise RuntimeError(
+                "AWS credentials not configured. Verify the OIDC role is set up correctly."
+            ) from e
+        except ClientError as e:
+            error_code = e.response["Error"]["Code"]
+            if error_code == "AccessDeniedException":
+                raise PermissionError(
+                    f"IAM role missing ce:GetCostAndUsage permission: {e}"
+                ) from e
+            raise RuntimeError(f"AWS API error [{error_code}]: {e}") from e
 
         yd_result = (yd_resp.get("ResultsByTime") or [{}])[0]
         yd_total = (yd_result.get("Total") or {}).get("UnblendedCost") or {}
@@ -75,8 +86,17 @@ class AWSCostClient:
                 "MONTHLY",
                 group_by=[{"Type": "DIMENSION", "Key": "SERVICE"}],
             )
-        except Exception as exc:
-            raise RuntimeError(f"Failed to fetch top services: {exc}") from exc
+        except NoCredentialsError as e:
+            raise RuntimeError(
+                "AWS credentials not configured. Verify the OIDC role is set up correctly."
+            ) from e
+        except ClientError as e:
+            error_code = e.response["Error"]["Code"]
+            if error_code == "AccessDeniedException":
+                raise PermissionError(
+                    f"IAM role missing ce:GetCostAndUsage permission: {e}"
+                ) from e
+            raise RuntimeError(f"AWS API error [{error_code}]: {e}") from e
 
         groups = (resp.get("ResultsByTime") or [{}])[0].get("Groups", [])
         services = [
@@ -98,8 +118,17 @@ class AWSCostClient:
 
         try:
             resp = self._get_cost(start, today, "DAILY")
-        except Exception as exc:
-            raise RuntimeError(f"Failed to fetch 7-day average: {exc}") from exc
+        except NoCredentialsError as e:
+            raise RuntimeError(
+                "AWS credentials not configured. Verify the OIDC role is set up correctly."
+            ) from e
+        except ClientError as e:
+            error_code = e.response["Error"]["Code"]
+            if error_code == "AccessDeniedException":
+                raise PermissionError(
+                    f"IAM role missing ce:GetCostAndUsage permission: {e}"
+                ) from e
+            raise RuntimeError(f"AWS API error [{error_code}]: {e}") from e
 
         days = resp.get("ResultsByTime", [])
         if not days:
@@ -122,7 +151,7 @@ class AWSCostClient:
         granularity: str,
         *,
         group_by: list[dict[str, str]] | None = None,
-    ) -> dict[str, Any]:
+    ) -> GetCostAndUsageResponseTypeDef:
         kwargs: dict[str, Any] = {
             "TimePeriod": {"Start": _iso(start), "End": _iso(end)},
             "Granularity": granularity,

@@ -15,7 +15,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: production
+      target: final
 
     image: aws-cost-guard:latest
 

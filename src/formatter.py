@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from .models import CostData, CostReport
@@ -37,17 +37,33 @@ def format_cost_payload(report: CostReport) -> dict[str, Any]:
         top_services_value = "No service data available."
 
     fields: list[dict[str, Any]] = [
-        {"name": "\U0001f4b0 Yesterday Spend", "value": _usd(cost_data.yesterday_spend, cost_data.currency), "inline": True},
-        {"name": "\U0001f4c5 Month to Date", "value": _usd(cost_data.month_to_date_spend, cost_data.currency), "inline": True},
-        {"name": "\U0001f4ca 7-Day Average", "value": _usd(anomaly.seven_day_average, cost_data.currency), "inline": True},
-        {"name": "\U0001f3c6 Top Services", "value": top_services_value, "inline": False},
+        {
+            "name": "\U0001f4b0 Yesterday Spend",
+            "value": _usd(cost_data.yesterday_spend, cost_data.currency),
+            "inline": True,
+        },
+        {
+            "name": "\U0001f4c5 Month to Date",
+            "value": _usd(cost_data.month_to_date_spend, cost_data.currency),
+            "inline": True,
+        },
+        {
+            "name": "\U0001f4ca 7-Day Average",
+            "value": _usd(anomaly.seven_day_average, cost_data.currency),
+            "inline": True,
+        },
+        {
+            "name": "\U0001f3c6 Top Services",
+            "value": top_services_value,
+            "inline": False,
+        },
     ]
 
     embed: dict[str, Any] = {
         "title": "AWS Daily Cost Report",
         "color": COLOR_RED if anomaly.is_anomaly else COLOR_GREEN,
         "fields": fields,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
     if description is not None:
         embed["description"] = description
