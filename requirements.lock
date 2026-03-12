@@ -78,6 +78,8 @@ python-dateutil==2.9.0
     # via
     #   botocore
     #   moto
+python-dotenv==1.2.2
+    # via aws-cost-guard (pyproject.toml)
 pyyaml==6.0.3
     # via responses
 requests==2.31.0

@@ -22,6 +22,8 @@ jmespath==1.0.1
     #   botocore
 python-dateutil==2.9.0
     # via botocore
+python-dotenv==1.2.2
+    # via aws-cost-guard (pyproject.toml)
 requests==2.31.0
     # via aws-cost-guard (pyproject.toml)
 s3transfer==0.10.1
