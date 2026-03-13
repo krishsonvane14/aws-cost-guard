@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 from .anomaly_engine import analyze_spend_variance
 from .aws_client import AWSCostClient
-from .formatter import exceeds_threshold, format_cost_payload
+from .formatter import format_cost_payload
 from .models import CostData, CostReport
 from .notifier import send_webhook
 
@@ -54,14 +54,6 @@ def main() -> None:
         f"7-day avg: ${seven_day_avg:.2f}"
     )
 
-    threshold = float(config["cost_threshold"])
-    if not exceeds_threshold(cost_data, threshold):
-        print(
-            f"MTD spend ${cost_data.month_to_date_spend:.2f} is within "
-            f"threshold ${threshold:.0f}. No alert sent."
-        )
-        return
-
     report = CostReport(
         cost_data=cost_data,
         top_services=top_services,
@@ -69,6 +61,12 @@ def main() -> None:
     )
 
     payload = format_cost_payload(report)
+    embed = payload.get("embeds", [{}])[0]
+    embed["title"] = (
+        "⚠️ Spend Anomaly Detected"
+        if anomaly_report.is_anomaly
+        else "✅ Daily AWS Cost Summary"
+    )
     send_webhook(str(config["webhook_url"]), payload)
     print(
         f"Alert sent \u2014 anomaly: {anomaly_report.is_anomaly}, "

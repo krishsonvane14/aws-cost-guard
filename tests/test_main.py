@@ -58,18 +58,21 @@ class TestMainHappyPath:
         mock_format: MagicMock,
         mock_send: MagicMock,
     ) -> None:
-        """When MTD is below the threshold, send_webhook must NOT be called."""
+        """When MTD is below the threshold, send_webhook must still be called once."""
         client = mock_client_cls.return_value
-        client.get_yesterday_and_mtd.return_value = FAKE_PARTIAL
+        client.get_yesterday_and_mtd.return_value = {
+            **FAKE_PARTIAL,
+            "month_to_date_spend": 50.0,
+        }
         client.get_top_services.return_value = FAKE_SERVICES
         client.get_seven_day_average.return_value = 40.0
+
+        mock_format.return_value = {"embeds": [{"title": "AWS Daily Cost Report"}]}
 
         from src.main import main
 
         main()
-
-        # MTD ($200) > threshold ($100) — so it IS sent in this case.
-        # Adjust: set MTD below threshold.
+        mock_send.assert_called_once()
 
     @patch("src.main.send_webhook")
     @patch("src.main.analyze_spend_variance", return_value=NO_ANOMALY)
