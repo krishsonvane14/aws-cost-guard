@@ -1,11 +1,18 @@
 # AWS Cost Guard
 
-[![Daily Cost Report](https://github.com/krishkumar/aws-cost-guard/actions/workflows/daily-report.yml/badge.svg)](https://github.com/krishkumar/aws-cost-guard/actions/workflows/daily-report.yml)
+[![Daily Cost Report](https://github.com/krishsonvane14/aws-cost-guard/actions/workflows/daily-report.yml/badge.svg)](https://github.com/krishsonvane14/aws-cost-guard/actions/workflows/daily-report.yml)
 ![Python 3.11](https://img.shields.io/badge/python-3.11-blue)
 ![License MIT](https://img.shields.io/badge/license-MIT-green)
 ![Zero IAM Keys](https://img.shields.io/badge/IAM_keys-zero-brightgreen)
 
 A zero-infrastructure AWS spend monitor that runs as a daily GitHub Actions cron job. It pulls yesterday's spend from AWS Cost Explorer, compares it against your 7-day rolling average to detect anomalies, and posts a color-coded alert to Discord or Slack. Authentication uses GitHub OIDC federation — no static IAM keys to store, rotate, or leak.
+
+---
+
+## Prerequisites
+
+1. Enable AWS Cost Explorer once — AWS Console → Billing & Cost Management → Cost Explorer → Enable Cost Explorer. Free, one-time. Data takes up to 24 hours to populate on brand new accounts.
+2. Make sure AWS CLI is installed and configured with `us-east-1` as the default region — Cost Explorer only works in `us-east-1`.
 
 ---
 
@@ -29,11 +36,20 @@ graph LR
 
 ```bash
 cd terraform
-# Set your GitHub username in terraform.tfvars
+
+# Create terraform.tfvars locally (gitignored) from this example
+cat > terraform.tfvars << 'EOF'
+github_org  = "your-github-username"
+github_repo = "aws-cost-guard"
+aws_region  = "us-east-1"
+EOF
+
 terraform init
 terraform plan
 terraform apply
 ```
+
+> ⚠️ If you get AccessDenied during terraform apply, your IAM user needs IAMFullAccess temporarily to create the OIDC provider and role. Attach it in IAM Console → Users → your user → Add permissions, run terraform apply, then immediately remove IAMFullAccess — it is not needed after setup.
 
 Copy the output:
 
@@ -68,7 +84,7 @@ Paste that ARN into your GitHub repo secret `AWS_ROLE_ARN`.
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
         },
         "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:<YOUR_ORG>/aws-cost-guard:ref:refs/heads/main"
+          "token.actions.githubusercontent.com:sub": "repo:<YOUR_ORG>/aws-cost-guard:*"
         }
       }
     }
@@ -99,11 +115,8 @@ Paste that ARN into your GitHub repo secret `AWS_ROLE_ARN`.
 
 | Secret Name | Value | Required |
 |---|---|---|
-| `AWS_ROLE_ARN` | IAM role ARN from Terraform output or manual setup | Yes |
-| `DISCORD_WEBHOOK_URL` | Discord incoming webhook URL | Yes* |
-| `SLACK_WEBHOOK_URL` | Slack incoming webhook URL | No |
-
-\* At least one webhook URL is required.
+| `AWS_ROLE_ARN` | IAM role ARN from Terraform output | Required |
+| `WEBHOOK_URL` | Discord or Slack incoming webhook URL | Required |
 
 Navigate to **Settings → Secrets and variables → Actions → New repository secret** to add each one.
 
@@ -112,7 +125,7 @@ Navigate to **Settings → Secrets and variables → Actions → New repository 
 ## Local Development
 
 ```bash
-git clone https://github.com/krishkumar/aws-cost-guard.git
+git clone https://github.com/krishsonvane14/aws-cost-guard.git
 cd aws-cost-guard
 make install
 cp .env.example .env    # fill in your webhook URL
@@ -152,8 +165,7 @@ aws-cost-guard/
 │   └── test_notifier.py     — webhook delivery + error handling
 ├── terraform/
 │   ├── oidc.tf              — GitHub OIDC provider + IAM role
-│   ├── versions.tf          — provider version constraints
-│   └── terraform.tfvars     — variable values (set github_org)
+│   └── versions.tf          — provider version constraints
 ├── .github/workflows/
 │   └── daily-report.yml     — cron schedule + OIDC auth + lint/test
 ├── Dockerfile               — multi-stage, non-root, Alpine-based
@@ -166,13 +178,28 @@ aws-cost-guard/
 └── .dockerignore            — excludes tests, terraform, .github from image
 ```
 
+Note: `terraform.tfvars` is gitignored and not present in a fresh clone. Create it locally by copying the example in the Setup section.
+
 ---
 
 ## Security Model
 
-- **OIDC authentication** — No static AWS keys are stored anywhere. GitHub mints a short-lived OIDC token (1-hour TTL), which is exchanged for temporary AWS credentials via `sts:AssumeRoleWithWebIdentity`. The trust policy is scoped to `repo:<org>/aws-cost-guard:ref:refs/heads/main` — only the `main` branch of this specific repository can assume the role.
+- **OIDC authentication** — No static AWS keys are stored anywhere. GitHub mints a short-lived OIDC token (1-hour TTL), which is exchanged for temporary AWS credentials via `sts:AssumeRoleWithWebIdentity`. The trust policy is scoped to `repo:<org>/aws-cost-guard:*` so this repository can authenticate across scheduled and manual workflow triggers.
 - **Least-privilege IAM** — The role's inline policy grants exactly one permission: `ce:GetCostAndUsage`. No S3, no EC2, no IAM — nothing else.
 - **Non-root Docker** — The production image runs as `appuser` (UID 1001). The final stage is Alpine-based with no pip, setuptools, or wheel installed. The docker-compose config adds `cap_drop: ALL`, `read_only: true`, and `no-new-privileges`.
+
+---
+
+## Troubleshooting
+
+| Error | Cause | Fix |
+|---|---|---|
+| DataUnavailableException | Cost Explorer not enabled or too new | Enable Cost Explorer in AWS Console and wait up to 24 hours |
+| AccessDeniedException | Role missing ce:GetCostAndUsage | Verify terraform apply completed successfully |
+| Could not assume role with OIDC | Wrong github_org in terraform.tfvars | Make sure github_org matches your exact GitHub username (case-sensitive) |
+| Missing required env var: WEBHOOK_URL | Secret named incorrectly in GitHub | Add secret named WEBHOOK_URL (not DISCORD_WEBHOOK_URL) in repo Settings |
+| ModuleNotFoundError | Stale pip cache or missing dep in lock file | Run make lock, commit updated requirements.txt and requirements.lock, re-run workflow |
+| Unsupported Terraform Core version | Old Terraform installed | Run brew tap hashicorp/tap && brew install hashicorp/tap/terraform |
 
 ---
 
@@ -183,7 +210,7 @@ aws-cost-guard/
 3. Add tests for new functionality (`make test`).
 4. Open a pull request against `main`.
 
-See [Issues](https://github.com/krishkumar/aws-cost-guard/issues) for open tasks.
+See [Issues](https://github.com/krishsonvane14/aws-cost-guard/issues) for open tasks.
 
 ---
 
