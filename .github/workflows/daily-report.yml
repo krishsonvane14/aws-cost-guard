@@ -36,7 +36,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
-          cache-dependency-path: "requirements.lock"
+          cache-dependency-path: "**/requirements*.txt"
 
       # No static keys needed — GitHub OIDC token is exchanged for
       # a short-lived AWS session.
