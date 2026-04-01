@@ -7,7 +7,6 @@ from typing import Any
 
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
-from mypy_boto3_ce.type_defs import GetCostAndUsageResponseTypeDef
 
 from .models import ServiceCost
 
@@ -32,17 +31,21 @@ class AWSCostClient:
 
     def get_yesterday_and_mtd(self) -> dict[str, Any]:
         """Return yesterday's spend, MTD total, and currency."""
-        # Use UTC to match AWS billing cycles
         today = datetime.now(timezone.utc).date()
         yesterday = today - timedelta(days=1)
         month_start = today.replace(day=1)
 
         try:
             yd_resp = self._get_cost(yesterday, today, "DAILY")
-            
-            # Fix: If today is the 1st, MTD is essentially $0.00
+
             if month_start == today:
-                mtd_spend = 0.0
+                # First of month: MTD is just yesterday's spend (last month's last day)
+                mtd_spend = _parse_amount(
+                    (yd_resp.get("ResultsByTime") or [{}])[0]
+                    .get("Total", {})
+                    .get("UnblendedCost", {})
+                    .get("Amount")
+                )
             else:
                 mtd_resp = self._get_cost(month_start, today, "DAILY")
                 mtd_spend = sum(
@@ -57,9 +60,9 @@ class AWSCostClient:
             ) from e
         except ClientError as e:
             error_code = e.response["Error"]["Code"]
-            if error_code == "AccessDeniedException":
+            if error_code in ("AccessDeniedException", "DataUnavailableException"):
                 raise PermissionError(
-                    f"IAM role missing ce:GetCostAndUsage permission: {e}"
+                    f"IAM role missing ce:GetCostAndUsage permission or data not yet available: {e}"
                 ) from e
             raise RuntimeError(f"AWS API error [{error_code}]: {e}") from e
 
@@ -78,17 +81,25 @@ class AWSCostClient:
         today = datetime.now(timezone.utc).date()
         month_start = today.replace(day=1)
 
-        # Fix: Return empty list on the 1st of the month
         if month_start == today:
-            return []
+            # First of month: fall back to last month's data
+            last_month_end = today - timedelta(days=1)   # e.g. March 31
+            month_start = last_month_end.replace(day=1)  # e.g. March 1
+            end = today                                   # April 1 (exclusive → covers all of March)
+        else:
+            end = today
 
         try:
             resp = self._get_cost(
                 month_start,
-                today,
+                end,
                 "MONTHLY",
                 group_by=[{"Type": "DIMENSION", "Key": "SERVICE"}],
             )
+        except NoCredentialsError as e:
+            raise RuntimeError(
+                "AWS credentials not configured. Verify the OIDC role is set up correctly."
+            ) from e
         except ClientError as e:
             error_code = e.response["Error"]["Code"]
             raise RuntimeError(f"AWS API error [{error_code}]: {e}") from e
@@ -111,9 +122,20 @@ class AWSCostClient:
         today = datetime.now(timezone.utc).date()
         start = today - timedelta(days=7)
 
-        resp = self._get_cost(start, today, "DAILY")
+        try:
+            resp = self._get_cost(start, today, "DAILY")
+        except NoCredentialsError as e:
+            raise RuntimeError(
+                "AWS credentials not configured. Verify the OIDC role is set up correctly."
+            ) from e
+        except ClientError as e:
+            error_code = e.response["Error"]["Code"]
+            # DataUnavailableException can occur on the 1st of the month
+            if error_code == "DataUnavailableException":
+                return 0.0
+            raise RuntimeError(f"AWS API error [{error_code}]: {e}") from e
+
         days = resp.get("ResultsByTime", [])
-        
         if not days:
             return 0.0
 
@@ -132,7 +154,12 @@ class AWSCostClient:
         granularity: str,
         *,
         group_by: list[dict[str, str]] | None = None,
-    ) -> GetCostAndUsageResponseTypeDef:
+    ) -> Any:
+        # Guard: Cost Explorer requires start to be strictly before end.
+        # Return an empty result instead of hitting the API with an invalid range.
+        if start >= end:
+            return {"ResultsByTime": []}
+
         kwargs: dict[str, Any] = {
             "TimePeriod": {"Start": _iso(start), "End": _iso(end)},
             "Granularity": granularity,
