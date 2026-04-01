@@ -167,4 +167,4 @@ class AWSCostClient:
         }
         if group_by:
             kwargs["GroupBy"] = group_by
-        return self._client.get_cost_and_usage(**kwargs)
+        return self._client.get_cost_and_usage(**kwargs)  # type: ignore[return-value]
