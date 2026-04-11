@@ -63,9 +63,7 @@ def main() -> None:
     payload = format_cost_payload(report)
     embed = payload.get("embeds", [{}])[0]
     embed["title"] = (
-        "⚠️ Spend Anomaly Detected"
-        if anomaly_report.is_anomaly
-        else "✅ Daily AWS Cost Summary"
+        "⚠️ Spend Anomaly Detected" if anomaly_report.is_anomaly else "✅ Daily AWS Cost Summary"
     )
     send_webhook(str(config["webhook_url"]), payload)
     print(

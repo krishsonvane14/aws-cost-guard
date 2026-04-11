@@ -7,8 +7,8 @@ from typing import Any
 
 from .models import CostData, CostReport
 
-COLOR_RED = 16711680   # #FF0000
-COLOR_GREEN = 65280    # #00FF00
+COLOR_RED = 16711680  # #FF0000
+COLOR_GREEN = 65280  # #00FF00
 
 
 def _usd(amount: float, currency: str) -> str:

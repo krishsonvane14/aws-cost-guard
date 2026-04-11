@@ -39,6 +39,7 @@ MOCK_SEVEN_DAY_AVERAGE = 20.00
 
 # ── Orchestration ─────────────────────────────────────────────────────────────
 
+
 def main() -> None:
     load_dotenv()
 

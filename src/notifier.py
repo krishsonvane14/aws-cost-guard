@@ -27,6 +27,4 @@ def send_webhook(webhook_url: str, payload: dict[str, Any]) -> None:
     except ConnectionError as e:
         raise RuntimeError(f"Failed to connect to webhook URL: {e}") from e
     except HTTPError as e:
-        raise RuntimeError(
-            f"Webhook returned HTTP {e.response.status_code}: {e}"
-        ) from e
+        raise RuntimeError(f"Webhook returned HTTP {e.response.status_code}: {e}") from e
