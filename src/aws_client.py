@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, date, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import boto3
@@ -31,7 +31,7 @@ class AWSCostClient:
 
     def get_yesterday_and_mtd(self) -> dict[str, Any]:
         """Return yesterday's spend, MTD total, and currency."""
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         yesterday = today - timedelta(days=1)
         month_start = today.replace(day=1)
 
@@ -49,9 +49,7 @@ class AWSCostClient:
             else:
                 mtd_resp = self._get_cost(month_start, today, "DAILY")
                 mtd_spend = sum(
-                    _parse_amount(
-                        (r.get("Total") or {}).get("UnblendedCost", {}).get("Amount")
-                    )
+                    _parse_amount((r.get("Total") or {}).get("UnblendedCost", {}).get("Amount"))
                     for r in mtd_resp.get("ResultsByTime", [])
                 )
         except NoCredentialsError as e:
@@ -78,14 +76,14 @@ class AWSCostClient:
 
     def get_top_services(self, limit: int = 5) -> list[ServiceCost]:
         """Fetch the top services for the current month."""
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         month_start = today.replace(day=1)
 
         if month_start == today:
             # First of month: fall back to last month's data
-            last_month_end = today - timedelta(days=1)   # e.g. March 31
+            last_month_end = today - timedelta(days=1)  # e.g. March 31
             month_start = last_month_end.replace(day=1)  # e.g. March 1
-            end = today                                   # April 1 (exclusive → covers all of March)
+            end = today  # April 1 (exclusive → covers all of March)
         else:
             end = today
 
@@ -119,7 +117,7 @@ class AWSCostClient:
 
     def get_seven_day_average(self) -> float:
         """Return the arithmetic mean of daily spend over the last 7 days."""
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         start = today - timedelta(days=7)
 
         try:
@@ -140,9 +138,7 @@ class AWSCostClient:
             return 0.0
 
         total = sum(
-            _parse_amount(
-                (r.get("Total") or {}).get("UnblendedCost", {}).get("Amount")
-            )
+            _parse_amount((r.get("Total") or {}).get("UnblendedCost", {}).get("Amount"))
             for r in days
         )
         return total / len(days)
@@ -167,4 +163,4 @@ class AWSCostClient:
         }
         if group_by:
             kwargs["GroupBy"] = group_by
-        return self._client.get_cost_and_usage(**kwargs)  # type: ignore[return-value]
+        return self._client.get_cost_and_usage(**kwargs)
